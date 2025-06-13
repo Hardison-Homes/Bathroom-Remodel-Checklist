@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bathroom Remodel Checklist</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://apis.google.com/js/api.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 2rem auto;
+      padding: 1rem;
+      background-color: #f9f9f9;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+    }
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      background-color: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      cursor: grab;
+    }
+    .item input[type="text"], .item input[type="number"] {
+      padding: 5px;
+      width: 200px;
+    }
+    .item input[type="number"] {
+      width: 100px;
+    }
+    .item input[type="checkbox"] {
+      transform: scale(1.2);
+    }
+    .delete-btn {
+      cursor: pointer;
+      color: red;
+      font-weight: bold;
+      border: none;
+      background: transparent;
+      font-size: 1.2rem;
+    }
+    .total {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-top: 20px;
+      text-align: right;
+    }
+    button, select {
+      display: inline-block;
+      margin: 10px 5px;
+      padding: 10px 15px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bathroom Remodel Checklist</h1>
+  <select id="filterOptions">
+    <option value="default">-- Sort/Filter --</option>
+    <option value="priceHigh">Price: High to Low</option>
+    <option value="priceLow">Price: Low to High</option>
+    <option value="checkedOnly">Show Checked Only</option>
+    <option value="all">Show All</option>
+  </select>
+  <div id="remodelForm"></div>
+
+  <div class="total">Total: $<span id="totalCost">0</span></div>
+
+  <button onclick="addItem()">➕ Add Item</button>
+  <button onclick="clearAll()">🧹 Clear All</button>
+  <button onclick="exportToPDF()">📄 Export PDF</button>
+  <button onclick="exportToCSV()">📄 Export CSV</button>
+  <button onclick="exportToExcel()">📊 Export Excel</button>
+  <button onclick="saveToDrive()">☁️ Save to Google Drive</button>
+  <button onclick="undo()">↩️ Undo</button>
+  <button onclick="redo()">↪️ Redo</button>
+
+  <script>
+    let itemsData = [];
+    let history = [];
+    let redoStack = [];
+
+    function saveHistory() {
+      history.push(JSON.stringify(itemsData));
+      redoStack = [];
+    }
+
+    function undo() {
+      if (history.length > 0) {
+        redoStack.push(JSON.stringify(itemsData));
+        itemsData = JSON.parse(history.pop());
+        saveAndRender(false);
+      }
+    }
+
+    function redo() {
+      if (redoStack.length > 0) {
+        history.push(JSON.stringify(itemsData));
+        itemsData = JSON.parse(redoStack.pop());
+        saveAndRender(false);
+      }
+    }
+
+    function addItem(name = '', price = 0, checked = false) {
+      saveHistory();
+      itemsData.push({ name, price, checked });
+      saveAndRender();
+    }
+
+    function clearAll() {
+      if (confirm('Are you sure you want to clear all items?')) {
+        saveHistory();
+        itemsData = [];
+        saveAndRender();
+      }
+    }
+
+    function exportToPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("Bathroom Remodel Checklist", 10, 10);
+      let y = 20;
+      itemsData.forEach(item => {
+        doc.text(`${item.checked ? '[x]' : '[ ]'} ${item.name} - $${item.price}`, 10, y);
+        y += 10;
+      });
+      doc.save("checklist.pdf");
+    }
+
+    function exportToCSV() {
+      let csv = 'Name,Price,Checked\n';
+      itemsData.forEach(item => {
+        csv += `${item.name},${item.price},${item.checked}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'checklist.csv';
+      link.click();
+    }
+
+    function exportToExcel() {
+      const worksheet = XLSX.utils.json_to_sheet(itemsData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Checklist");
+      XLSX.writeFile(workbook, "checklist.xlsx");
+    }
+
+    function saveToDrive() {
+      alert("Google Drive saving is not implemented in this demo.");
+    }
+
+    function updateTotal() {
+      const total = itemsData.reduce((sum, item) => item.checked ? sum + Number(item.price) : sum, 0);
+      document.getElementById("totalCost").textContent = total.toFixed(2);
+    }
+
+    function saveAndRender(saveHistoryFlag = true) {
+      if (saveHistoryFlag) saveHistory();
+      const form = document.getElementById("remodelForm");
+      form.innerHTML = "";
+
+      itemsData.forEach((item, index) => {
+        const div = document.createElement("div");
+        div.className = "item";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = item.checked;
+        checkbox.onchange = () => {
+          item.checked = checkbox.checked;
+          saveAndRender();
+        };
+
+        const nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.value = item.name;
+        nameInput.oninput = () => {
+          item.name = nameInput.value;
+        };
+
+        const priceInput = document.createElement("input");
+        priceInput.type = "number";
+        priceInput.value = item.price;
+        priceInput.oninput = () => {
+          item.price = parseFloat(priceInput.value);
+          updateTotal();
+        };
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "delete-btn";
+        deleteBtn.textContent = "✖";
+        deleteBtn.onclick = () => {
+          saveHistory();
+          itemsData.splice(index, 1);
+          saveAndRender();
+        };
+
+        div.append(checkbox, nameInput, priceInput, deleteBtn);
+        form.appendChild(div);
+      });
+
+      updateTotal();
+      applySortable();
+    }
+
+    function applySortable() {
+      Sortable.create(document.getElementById('remodelForm'), {
+        animation: 150,
+        delay: 400,
+        delayOnTouchOnly: true,
+        onEnd: evt => {
+          saveHistory();
+          const movedItem = itemsData.splice(evt.oldIndex, 1)[0];
+          itemsData.splice(evt.newIndex, 0, movedItem);
+          saveAndRender(false);
+        }
+      });
+    }
+
+    document.getElementById("filterOptions").addEventListener("change", function() {
+      const option = this.value;
+      if (option === "priceHigh") {
+        itemsData.sort((a, b) => b.price - a.price);
+      } else if (option === "priceLow") {
+        itemsData.sort((a, b) => a.price - b.price);
+      } else if (option === "checkedOnly") {
+        itemsData = itemsData.filter(item => item.checked);
+      } else if (option === "all") {
+        // do nothing
+      }
+      saveAndRender();
+    });
+
+    // Initialize
+    saveAndRender();
+  </script>
+</body>
+</html>
